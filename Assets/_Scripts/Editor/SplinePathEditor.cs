@@ -7,6 +7,7 @@ namespace TrafficSystem
     [CustomEditor(typeof(SplinePath))]
     public class SplinePathEditor : Editor
     {
+        // override scripts component inspector
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
@@ -19,40 +20,50 @@ namespace TrafficSystem
                 spline.AddAnchor();
                 spline.SetDirty();
                 serializedObject.Update();
+                EditorUtility.SetDirty(spline);
+                SceneView.RepaintAll();
             }
 
             // button functionaility for removing the last anchor
             if (GUILayout.Button("Remove Last Anchor"))
             {
-                if (spline.GetAnchors().Count > 1) return;
+                if (spline.GetAnchors().Count <= 2) return;
 
                 Undo.RecordObject(spline, "Remove Last Anchor");
                 spline.RemoveLastAnchor();
                 spline.SetDirty();
                 serializedObject.Update();
+                EditorUtility.SetDirty(spline);
+                SceneView.RepaintAll();
             }
 
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("m_GizmoSize"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_HandleOffsetA"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_HandleOffsetB"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Normal"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_IsLoopClosed"));
 
             serializedObject.ApplyModifiedProperties();
         }
 
+        // show script values in scene
         public void OnSceneGUI()
         {
             SplinePath spline = (SplinePath)target;
 
             Vector3 transformPosition = spline.transform.position;
-
             List<SplinePath.Anchor> anchorList = spline.GetAnchors();
+
             if (anchorList != null)
             {
+                // foreach anchor point
                 foreach (SplinePath.Anchor anchor in spline.GetAnchors())
                 {
+                    // draw anchor positions
                     Handles.color = Color.white;
-                    Handles.DrawWireCube(transformPosition + anchor.Position, Vector3.one * .5f);
+                    Handles.DrawWireCube(transformPosition + anchor.Position, Vector3.one * spline.GetGizmoSize());
 
+                    // handle movement of positions
                     EditorGUI.BeginChangeCheck();
                     Vector3 newPosition = Handles.PositionHandle(transformPosition + anchor.Position, Quaternion.identity);
                     if (EditorGUI.EndChangeCheck())
@@ -64,10 +75,11 @@ namespace TrafficSystem
                     }
 
 
-
+                    // draw handle A
                     Handles.color = Color.green;
-                    Handles.SphereHandleCap(0, transformPosition + anchor.HandleAPosition, Quaternion.identity, .5f, EventType.Repaint);
+                    Handles.SphereHandleCap(0, transformPosition + anchor.HandleAPosition, Quaternion.identity, spline.GetGizmoSize(), EventType.Repaint);
 
+                    // handle movement of positions
                     EditorGUI.BeginChangeCheck();
                     newPosition = Handles.PositionHandle(transformPosition + anchor.HandleAPosition, Quaternion.identity);
                     if (EditorGUI.EndChangeCheck())
@@ -79,10 +91,11 @@ namespace TrafficSystem
                     }
 
 
-
+                    // draw handle B
                     Handles.color = Color.blue;
-                    Handles.SphereHandleCap(0, transformPosition + anchor.HandleBPosition, Quaternion.identity, .5f, EventType.Repaint);
+                    Handles.SphereHandleCap(0, transformPosition + anchor.HandleBPosition, Quaternion.identity, spline.GetGizmoSize(), EventType.Repaint);
 
+                    // handle movement of positions
                     EditorGUI.BeginChangeCheck();
                     newPosition = Handles.PositionHandle(transformPosition + anchor.HandleBPosition, Quaternion.identity);
                     if (EditorGUI.EndChangeCheck())
@@ -93,6 +106,7 @@ namespace TrafficSystem
                         serializedObject.Update();
                     }
 
+                    // draw lines from handles to anchors
                     Handles.color = Color.white;
                     Handles.DrawLine(transformPosition + anchor.Position, transformPosition + anchor.HandleAPosition);
                     Handles.DrawLine(transformPosition + anchor.Position, transformPosition + anchor.HandleBPosition);
@@ -108,7 +122,7 @@ namespace TrafficSystem
                     Handles.DrawBezier(transformPosition + anchor.Position, transformPosition + nextAnchor.Position, transformPosition + anchor.HandleBPosition, transformPosition + nextAnchor.HandleAPosition, Color.grey, null, 3f);
                 }
 
-                if (spline.IsLoopClosed())
+                if (spline.IsLoopClosed() && spline.GetAnchors().Count >= 2)
                 {
                     // Spline is Closed Loop
                     SplinePath.Anchor anchor = spline.GetAnchors()[spline.GetAnchors().Count - 1];

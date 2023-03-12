@@ -6,18 +6,24 @@ namespace TrafficSystem
 {
     public class SplinePath : MonoBehaviour
     {
-        [SerializeField] private Vector3 m_HandleOffsetA = new Vector3(0, 0, 0.5f);
-        [SerializeField] private Vector3 m_HandleOffsetB = new Vector3(0, 0, 0.5f);
+        [SerializeField, Range(0, 1)] private float m_GizmoSize = 0.25f;
+        [SerializeField] private Vector3 m_HandleOffsetA = new Vector3(1f, 0, 0.5f);
+        [SerializeField] private Vector3 m_HandleOffsetB = new Vector3(1f, 0, -0.5f);
+        [SerializeField] private Vector3 m_Normal = new Vector3(0, 0, -1);
         [SerializeField] private bool m_IsLoopClosed;
         [SerializeField] private List<Anchor> m_Anchors = new List<Anchor>();
 
+        private List<Point> m_Points;
         private float m_SplineLength;
+        private float m_PointAmountInCurve;
+        private float m_PointAmountPerUnitInCurve = 2f;
 
         public event Action OnDirty;
 
         private void Awake()
         {
             m_SplineLength = GetSplineLength();
+            SetupPointList();
         }
 
         /// <summary>
@@ -25,7 +31,7 @@ namespace TrafficSystem
         /// </summary>
         /// <param name="time">Value used to interpolate between a and b.</param>
         /// <returns>The position on spline based on time.</returns>
-        private Vector3 GetPositionAt(float time)
+        public Vector3 GetPositionAt(float time)
         {
             // if at the end of the spline
             if (time == 1)
@@ -86,6 +92,33 @@ namespace TrafficSystem
             }
         }
 
+        public Vector3 GetForwardAt(float time)
+        {
+            Point pointA = GetPreviousPoint(time);
+            int pointBIndex = (m_Points.IndexOf(pointA) + 1) % m_Points.Count;
+            Point pointB = m_Points[pointBIndex];
+
+            return Vector3.Lerp(pointA.Forward, pointB.Forward, (time - pointA.Time) / Mathf.Abs(pointA.Time - pointB.Time));
+        }
+
+        public Point GetPreviousPoint(float time)
+        {
+            int previousIndex = 0;
+            for (int i = 1; i < m_Points.Count; i++)
+            {
+                Point point = m_Points[i];
+                if (time < point.Time)
+                {
+                    return m_Points[previousIndex];
+                }
+                else
+                {
+                    previousIndex++;
+                }
+            }
+            return m_Points[previousIndex];
+        }
+
         /// <summary>
         /// Returns the position on the spline at a specified distance along the curve.
         /// </summary>
@@ -115,6 +148,33 @@ namespace TrafficSystem
             }
 
             // if the target unit distance was not reached, interpolate along the entire spline
+            Anchor anchorA = m_Anchors[0];
+            Anchor anchorB = m_Anchors[1];
+            return Spline.CubicLerp(anchorA.Position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.Position, unitDistance / m_SplineLength);
+        }
+
+        public Vector3 GetForwardAtUnits(float unitDistance, float stepSize = 0.01f)
+        {
+            float splineUnitDistance = 0f;
+            Vector3 lastPosition = GetPositionAt(0f);
+
+            float incrementAmount = stepSize;
+            for (float t = 0; t < 1f; t += incrementAmount)
+            {
+                float lastDistance = Vector3.Distance(lastPosition, GetPositionAt(t));
+                splineUnitDistance += lastDistance;
+
+                lastPosition = GetPositionAt(t);
+
+                if (splineUnitDistance >= unitDistance)
+                {
+                    float remainingDistance = splineUnitDistance - unitDistance;
+                    return GetForwardAt(t - ((remainingDistance / lastDistance) * incrementAmount));
+                }
+
+            }
+
+            // Default
             Anchor anchorA = m_Anchors[0];
             Anchor anchorB = m_Anchors[1];
             return Spline.CubicLerp(anchorA.Position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.Position, unitDistance / m_SplineLength);
@@ -155,8 +215,8 @@ namespace TrafficSystem
                 m_Anchors.Add(new Anchor
                 {
                     Position = new Vector3(0, 0, 0),
-                    HandleAPosition = new Vector3(0, 0, 0),
-                    HandleBPosition = new Vector3(0, 0, 0),
+                    HandleAPosition = m_HandleOffsetA,
+                    HandleBPosition = m_HandleOffsetB,
                 });
             }
 
@@ -187,12 +247,68 @@ namespace TrafficSystem
         {
             m_SplineLength = GetSplineLength();
 
+            UpdatePointList();
+
             OnDirty?.Invoke();
         }
 
-        public List<Anchor> GetAnchors() { return m_Anchors; }
+        private void SetupPointList()
+        {
+            m_Points = new List<Point>();
+            m_PointAmountInCurve = m_PointAmountPerUnitInCurve * m_SplineLength;
+            for (float t = 0; t < 1f; t += 1f / m_PointAmountInCurve)
+            {
+                m_Points.Add(new Point
+                {
+                    Time = t,
+                    Position = GetPositionAt(t),
+                    Normal = m_Normal,
+                });
+            }
 
+            m_Points.Add(new Point
+            {
+                Time = 1f,
+                Position = GetPositionAt(1f),
+            });
+
+            UpdateForwardVectors();
+        }
+
+        private void UpdatePointList()
+        {
+            if (m_Points == null) return;
+
+            foreach (Point point in m_Points)
+            {
+                point.Position = GetPositionAt(point.Time);
+            }
+
+            UpdateForwardVectors();
+        }
+
+        private void UpdateForwardVectors()
+        {
+            // Set forward vectors
+            for (int i = 0; i < m_Points.Count - 1; i++)
+            {
+                m_Points[i].Forward = (m_Points[i + 1].Position - m_Points[i].Position).normalized;
+            }
+            // Set final forward vector
+            if (m_IsLoopClosed)
+            {
+                m_Points[m_Points.Count - 1].Forward = m_Points[0].Forward;
+            }
+            else
+            {
+                m_Points[m_Points.Count - 1].Forward = m_Points[m_Points.Count - 2].Forward;
+            }
+        }
+
+        // getters
+        public List<Anchor> GetAnchors() { return m_Anchors; }
         public bool IsLoopClosed() { return m_IsLoopClosed; }
+        public float GetGizmoSize() { return m_GizmoSize; }
 
         [Serializable]
         public class Anchor
