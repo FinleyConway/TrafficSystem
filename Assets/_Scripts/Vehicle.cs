@@ -5,12 +5,13 @@ namespace TrafficSystem
     public class Vehicle : MonoBehaviour
     {
         public SplinePath m_Spline;
+        public Anchor m_NextAnchor;
         [SerializeField] private float m_Speed = 1;
 
         public float m_MoveAmount;
         public float m_MaxMoveAmount = 1f;
 
-        private void Start ()
+        private void Start()
         {
             m_MaxMoveAmount = m_Spline.GetSplineLength();
         }
@@ -21,27 +22,14 @@ namespace TrafficSystem
 
             SplinePath.SplineInfo splinePath = m_Spline.GetPositionAtUnits(m_MoveAmount);
 
-            print((Mathf.Abs(m_MoveAmount - m_MaxMoveAmount) < 0.1f));
-
-            if (Mathf.Abs(m_MoveAmount - m_MaxMoveAmount) < 0.1f)
-            {
-                Anchor nextAnchor = splinePath.NextAnchor;
-                if (nextAnchor.Branches.Count > 0 && !m_Spline.IsLoopClosed() && nextAnchor != null)
-                {
-                    m_MoveAmount = 0;
-                    m_Spline = ChooseRandomBranch(nextAnchor);
-                    m_MaxMoveAmount = m_Spline.GetSplineLength();
-                }
-            }
-
             transform.position = splinePath.Position;
             transform.forward = m_Spline.GetForwardAtUnits(m_MoveAmount);
         }
 
-        private SplinePath ChooseRandomBranch(Anchor path)
+        private void OnDrawGizmos()
         {
-            int choice = Random.Range(0, path.Branches.Count);
-            return path.NewSpline[choice];
+            if (m_NextAnchor != null)
+                Gizmos.DrawSphere(m_NextAnchor.transform.position, 0.5f);
         }
     }
 }

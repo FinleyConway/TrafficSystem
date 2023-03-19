@@ -1,24 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace TrafficSystem
 {
     public class SplinePath : MonoBehaviour
     {
         [SerializeField] private Vector3 m_Normal = new Vector3(0, 0, -1);
-        [SerializeField] private bool m_IsLoopClosed;
-        [SerializeField] private List<Anchor> m_Anchors = new List<Anchor>();
+        [field: SerializeField] public bool IsLoopClosed { get; private set; }
+        [field: SerializeField] public List<Anchor> Anchors { get; set; } = new List<Anchor>();
 
         private List<Point> m_Points;
         private float m_SplineLength;
         private float m_PointAmountInCurve;
-        private float m_PointAmountPerUnitInCurve = 2f;
+        private const float m_PointAmountPerUnitInCurve = 2f;
 
         public event Action OnDirty;
 
-        private void Awake()
+        private void Start()
         {
             m_SplineLength = GetSplineLength();
             SetupPointList();
@@ -28,7 +27,7 @@ namespace TrafficSystem
         /// Returns the position on the spline based on time
         /// </summary>
         /// <param name="time">Value used to interpolate between a and b.</param>
-        /// <returns>The position on spline based on time.</returns>
+        /// <returns>The position on spline based on time and the neighboring anchors.</returns>
         public SplineInfo GetPositionAt(float time)
         {
             SplineInfo splineInfo = new SplineInfo();
@@ -39,66 +38,80 @@ namespace TrafficSystem
                 Anchor anchorA;
                 Anchor anchorB;
 
-                if (m_IsLoopClosed)
+                if (IsLoopClosed)
                 {
                     // last position and first position for closed loop
-                    anchorA = m_Anchors[m_Anchors.Count - 1];
-                    anchorB = m_Anchors[0];
+                    anchorA = Anchors[Anchors.Count - 1];
+                    anchorB = Anchors[0];
                 }
                 else
                 {
                     // second last and last position for open spline
-                    anchorA = m_Anchors[m_Anchors.Count - 2];
-                    anchorB = m_Anchors[m_Anchors.Count - 1];
+                    anchorA = Anchors[Anchors.Count - 2];
+                    anchorB = Anchors[Anchors.Count - 1];
                 }
 
-                splineInfo.NextAnchor = m_IsLoopClosed ? m_Anchors[0] : null;
-                splineInfo.Position = transform.position + Spline.CubicLerp(anchorA.transform.position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.transform.position, time);
+                splineInfo.LastAnchor = anchorA;
+                splineInfo.CurrentAnchor = anchorB;
+                splineInfo.NextAnchor = IsLoopClosed ? Anchors[0] : anchorB = Anchors[Anchors.Count - 1];
+                splineInfo.Position = Spline.CubicLerp(anchorA.transform.position, transform.position + anchorA.HandleBPosition, transform.position + anchorB.HandleAPosition, anchorB.transform.position, time);
 
                 return splineInfo;
             }
             else
             {
-                int addClosedLoop = m_IsLoopClosed ? 1 : 0;
+                int addClosedLoop = IsLoopClosed ? 1 : 0;
 
                 // calculate the index of the two anchors to interpolate between
-                float tFull = time * (m_Anchors.Count - 1 + addClosedLoop);
+                float tFull = time * (Anchors.Count - 1 + addClosedLoop);
                 int anchorIndex = Mathf.FloorToInt(tFull);
                 float tAnchor = tFull - anchorIndex;
 
                 Anchor anchorA;
                 Anchor anchorB;
 
-                if (anchorIndex < m_Anchors.Count - 1)
+                if (anchorIndex < Anchors.Count - 1)
                 {
                     // get the two anchors to interpolate between
-                    anchorA = m_Anchors[anchorIndex + 0];
-                    anchorB = m_Anchors[anchorIndex + 1];
-                    splineInfo.NextAnchor = m_Anchors[anchorIndex + 1];
+                    anchorA = Anchors[anchorIndex + 0];
+                    anchorB = Anchors[anchorIndex + 1];
+                    splineInfo.LastAnchor = anchorA;
+                    splineInfo.CurrentAnchor = anchorB;
+                    splineInfo.NextAnchor = Anchors[anchorIndex + 1];
                 }
                 else
                 {
                     // if at the end of the spline, either link to "next" one or loop back to the first
-                    if (m_IsLoopClosed)
+                    if (IsLoopClosed)
                     {
-                        anchorA = m_Anchors[m_Anchors.Count - 1];
-                        anchorB = m_Anchors[0];
-                        splineInfo.NextAnchor = m_Anchors[0];
+                        anchorA = Anchors[Anchors.Count - 1];
+                        anchorB = Anchors[0];
+                        splineInfo.LastAnchor = anchorA;
+                        splineInfo.CurrentAnchor = anchorB;
+                        splineInfo.NextAnchor = anchorB;
                     }
                     else
                     {
-                        anchorA = m_Anchors[anchorIndex - 1];
-                        anchorB = m_Anchors[anchorIndex + 0];
+                        anchorA = Anchors[anchorIndex - 1];
+                        anchorB = Anchors[anchorIndex + 0];
                         tAnchor = 1f;
+                        splineInfo.LastAnchor = anchorA;
+                        splineInfo.CurrentAnchor = anchorB;
+                        splineInfo.NextAnchor = null;
                     }
                 }
 
-                splineInfo.Position = transform.position + Spline.CubicLerp(anchorA.transform.position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.transform.position, tAnchor);
+                splineInfo.Position = Spline.CubicLerp(anchorA.transform.position, transform.position + anchorA.HandleBPosition, transform.position + anchorB.HandleAPosition, anchorB.transform.position, tAnchor);
 
                 return splineInfo;
             }
         }
 
+        /// <summary>
+        /// Gets the forward direction of an object at a specific time by linearly interpolating between the previous and next point's forward directions.
+        /// </summary>
+        /// <param name="time">The time at which to get the forward direction.</param>
+        /// <returns>The forward direction of the object at the specified time.</returns>
         public Vector3 GetForwardAt(float time)
         {
             Point pointA = GetPreviousPoint(time);
@@ -108,6 +121,11 @@ namespace TrafficSystem
             return Vector3.Lerp(pointA.Forward, pointB.Forward, (time - pointA.Time) / Mathf.Abs(pointA.Time - pointB.Time));
         }
 
+        /// <summary>
+        /// Returns the previous point in the collection of points with a time less than the specified time.
+        /// </summary>
+        /// <param name="time">The time used to find the previous point.</param>
+        /// <returns>The previous point in the collection of points.</returns>
         public Point GetPreviousPoint(float time)
         {
             int previousIndex = 0;
@@ -131,7 +149,7 @@ namespace TrafficSystem
         /// </summary>
         /// <param name="unitDistance">The distance in units to sample the spline at.</param>
         /// <param name="stepSize">The step size used when sampling the spline. A smaller step size will result in a more accurate distance calculation but will be slower.</param>
-        /// <returns>The position on the spline at the specified distance.</returns>
+        /// <returns>The position on the spline at the specified distance and the next anchor.</returns>
         public SplineInfo GetPositionAtUnits(float unitDistance, float stepSize = 0.01f)
         {
             SplineInfo splineInfo = new SplineInfo();
@@ -160,8 +178,8 @@ namespace TrafficSystem
             }
 
             // if the target unit distance was not reached, interpolate along the entire spline
-            Anchor anchorA = m_Anchors[0];
-            Anchor anchorB = m_Anchors[1];
+            Anchor anchorA = Anchors[0];
+            Anchor anchorB = Anchors[1];
 
             splineInfo.Position = Spline.CubicLerp(anchorA.transform.position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.transform.position, unitDistance / m_SplineLength);
             splineInfo.NextAnchor = anchorA;
@@ -169,6 +187,12 @@ namespace TrafficSystem
             return splineInfo;
         }
 
+        /// <summary>
+        /// Returns the forward direction of an object at a distance along the spline by linearly interpolating between the previous and next point's forward directions.
+        /// </summary>
+        /// <param name="unitDistance">The distance along the spline at which to get the forward direction.</param>
+        /// <param name="stepSize">The step size used to increment along the spline.</param>
+        /// <returns>The forward direction of the object at the specified distance along the spline.</returns>
         public Vector3 GetForwardAtUnits(float unitDistance, float stepSize = 0.01f)
         {
             float splineUnitDistance = 0f;
@@ -190,8 +214,8 @@ namespace TrafficSystem
             }
 
             // Default
-            Anchor anchorA = m_Anchors[0];
-            Anchor anchorB = m_Anchors[1];
+            Anchor anchorA = Anchors[0];
+            Anchor anchorB = Anchors[1];
             return Spline.CubicLerp(anchorA.transform.position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.transform.position, unitDistance / m_SplineLength);
         }
 
@@ -218,6 +242,33 @@ namespace TrafficSystem
         }
 
         /// <summary>
+        /// Get the size of the spline to a specific anchor.
+        /// </summary>
+        /// <param name="stepSize">How many iterations to check. Lower is more accurate.</param>
+        /// <returns>The size of the spline.</returns>
+        public float GetSplineLengthTo(Anchor to, float stepSize = 0.01f)
+        {
+            float splineLength = 0;
+            Vector3 lastPosition = GetPositionAt(0f).Position;
+
+            // iterate through spline until the target anchor is reached
+            for (float t = 0; t < 1f; t += stepSize)
+            {
+                splineLength += Vector3.Distance(lastPosition, GetPositionAt(t).Position);
+                lastPosition = GetPositionAt(t).Position;
+                // if the end of the spline is reached before the target anchor, break out of loop
+                if (GetPositionAt(t).CurrentAnchor == to)
+                {
+                    break;
+                }
+            }
+
+            // adds the distance between the last position and the last position in the spline
+            //splineLength += Vector3.Distance(lastPosition, GetPositionAt(1f).Position);
+            return splineLength;
+        }
+
+        /// <summary>
         /// Update Spline.
         /// </summary>
         public void SetDirty()
@@ -229,7 +280,7 @@ namespace TrafficSystem
             OnDirty?.Invoke();
         }
 
-        private void SetupPointList()
+        public void SetupPointList()
         {
             m_Points = new List<Point>();
             m_PointAmountInCurve = m_PointAmountPerUnitInCurve * m_SplineLength;
@@ -272,7 +323,7 @@ namespace TrafficSystem
                 m_Points[i].Forward = (m_Points[i + 1].Position - m_Points[i].Position).normalized;
             }
             // Set final forward vector
-            if (m_IsLoopClosed)
+            if (IsLoopClosed)
             {
                 m_Points[m_Points.Count - 1].Forward = m_Points[0].Forward;
             }
@@ -282,9 +333,33 @@ namespace TrafficSystem
             }
         }
 
-        // getters
-        public List<Anchor> GetAnchors() { return m_Anchors; }
-        public bool IsLoopClosed() { return m_IsLoopClosed; }
+        public Anchor GetPreviousAnchor(Anchor anchor)
+        {
+            int prev = Anchors.IndexOf(anchor);
+            if (prev > 0)
+            {
+                Anchor prevAnchor = Anchors[prev - 1];
+                return prevAnchor;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        public Anchor GetNextAnchor(Anchor anchor)
+        {
+            int next = Anchors.IndexOf(anchor);
+            if (next < Anchors.Count - 1)
+            {
+                Anchor nextAnchor = Anchors[next + 1];
+                return nextAnchor;
+            }
+            else
+            {
+                return null;
+            }
+        }
 
         [Serializable]
         public class Point
@@ -298,6 +373,8 @@ namespace TrafficSystem
         public class SplineInfo
         {
             public Vector3 Position;
+            public Anchor CurrentAnchor;
+            public Anchor LastAnchor;
             public Anchor NextAnchor;
         }
     }

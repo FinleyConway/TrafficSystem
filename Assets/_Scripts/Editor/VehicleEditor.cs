@@ -24,7 +24,7 @@ namespace TrafficSystem
             {
                 vehicle.m_MoveAmount = 0;
                 vehicle.m_Spline = m_DefaultSpline;
-                vehicle.m_MaxMoveAmount = vehicle.m_Spline.GetSplineLength();
+                vehicle.m_MaxMoveAmount = m_DefaultSpline.GetSplineLength();
             }
         }
     }
