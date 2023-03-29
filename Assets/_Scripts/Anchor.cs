@@ -6,6 +6,11 @@ namespace TrafficSystem
 {
     public class Anchor : MonoBehaviour, IHeapItem<Anchor>
     {
+        private void Awake()
+        {
+            if (TryGetComponent(out BoxCollider box)) Destroy(box);
+        }
+
         [field: SerializeField] public Vector3 HandleAPosition { get; set; }
         [field: SerializeField] public Vector3 HandleBPosition { get; set; }
         [field: SerializeField] public List<Branch> Branches { get; private set; } = new List<Branch>();

@@ -13,8 +13,16 @@ namespace TrafficSystem
         public SplinePath Follow;
         public Vehicle Vehicle;
 
+        public List<Anchor> Anchors = new List<Anchor>();
+
         private void Awake()
         {
+            Anchor[] anchors = GameObject.FindObjectsOfType<Anchor>();
+            for (int i = 0;i < anchors.Length; i++)
+            {
+                Anchors.Add(anchors[i]);
+            }
+
             FindPath(Start, End);
         }
 
@@ -96,7 +104,7 @@ namespace TrafficSystem
             }
 
             anchors.Add(path.GetNextAnchor(anchor));
-            anchors.Add(path.GetPreviousAnchor(anchor)); 
+            //anchors.Add(path.GetPreviousAnchor(anchor)); 
             return anchors;
         }
 

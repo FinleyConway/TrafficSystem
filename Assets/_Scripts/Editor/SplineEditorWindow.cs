@@ -6,6 +6,7 @@ namespace TrafficSystem
 {
     public class SplineEditorWindow : EditorWindow
     {
+        [SerializeField] private Vector3 m_HandleSnap = new Vector3(0.1f, 0.1f, 0.1f);
         [SerializeField] private SplinePath m_Spline;
         [SerializeField] private List<SplinePath> m_ActiveSplines;
 
@@ -30,6 +31,7 @@ namespace TrafficSystem
             SerializedObject serializedObject = new SerializedObject(this);
             serializedObject.Update();
 
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("m_HandleSnap"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Spline"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_ActiveSplines"));
 
@@ -39,7 +41,7 @@ namespace TrafficSystem
                 {
                     // create spline and anchor
                     GameObject path = new GameObject("Spline Path Root", typeof(SplinePath));
-                    GameObject anchorObject = new GameObject("Anchor " + path.transform.childCount, typeof(Anchor));
+                    GameObject anchorObject = new GameObject("Anchor " + path.transform.childCount, typeof(Anchor), typeof(BoxCollider));
 
                     anchorObject.transform.SetParent(path.transform, false);
 
@@ -66,6 +68,20 @@ namespace TrafficSystem
 
             if (m_Spline != null && m_Spline.Anchors.Count > 0)
             {
+                // allow to click on anchors
+                HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
+                Event currentEvent = Event.current;
+                EventType eventType = currentEvent.type;
+                if (eventType == EventType.MouseDown && currentEvent.button == 0)
+                {
+                    Ray mouseRay = HandleUtility.GUIPointToWorldRay(currentEvent.mousePosition);
+                    if (Physics.Raycast(mouseRay, out RaycastHit hit))
+                    {
+                        if (hit.transform.TryGetComponent(out Anchor anchor))
+                            Selection.activeGameObject = hit.transform.gameObject;
+                    }
+                }
+
                 Vector3 transformPosition = m_Spline.transform.position;
 
                 foreach (SplinePath spline in m_ActiveSplines)
@@ -73,13 +89,15 @@ namespace TrafficSystem
                     // foreach anchor point
                     foreach (Anchor anchor in spline.Anchors)
                     {
-                        // draw anchor positions
-                        Handles.color = Color.red;
-                        Handles.SphereHandleCap(0, anchor.transform.position, Quaternion.identity, 0.15f, EventType.Repaint);
+                        // draw lines from handles to anchors
+                        Handles.color = Color.black;
+                        Handles.DrawLine(anchor.transform.position, transformPosition + anchor.HandleAPosition, 3);
+                        Handles.DrawLine(anchor.transform.position, transformPosition + anchor.HandleBPosition, 3);
 
                         // handle movement of positions
                         EditorGUI.BeginChangeCheck();
-                        Vector3 newPosition = Handles.PositionHandle(anchor.transform.position, Quaternion.identity);
+                        Handles.color = Color.red;
+                        Vector3 newPosition = Handles.FreeMoveHandle(anchor.transform.position, Quaternion.identity, 0.2f, m_HandleSnap, Handles.SphereHandleCap);
                         if (EditorGUI.EndChangeCheck())
                         {
                             Undo.RecordObject(spline, "Change Anchor Position");
@@ -89,13 +107,10 @@ namespace TrafficSystem
                         }
 
 
-                        // draw handle A
-                        Handles.color = Color.blue;
-                        Handles.SphereHandleCap(0, transformPosition + anchor.HandleAPosition, Quaternion.identity, 0.15f, EventType.Repaint);
-
                         // handle movement of positions
                         EditorGUI.BeginChangeCheck();
-                        newPosition = Handles.PositionHandle(transformPosition + anchor.HandleAPosition, Quaternion.identity);
+                        Handles.color = Color.blue;
+                        newPosition = Handles.FreeMoveHandle(anchor.HandleAPosition, Quaternion.identity, 0.15f, m_HandleSnap, Handles.SphereHandleCap);
                         if (EditorGUI.EndChangeCheck())
                         {
                             Undo.RecordObject(spline, "Change Anchor Handle A Position");
@@ -105,13 +120,10 @@ namespace TrafficSystem
                         }
 
 
-                        // draw handle B
-                        Handles.color = Color.blue;
-                        Handles.SphereHandleCap(0, transformPosition + anchor.HandleBPosition, Quaternion.identity, 0.15f, EventType.Repaint);
-
                         // handle movement of positions
                         EditorGUI.BeginChangeCheck();
-                        newPosition = Handles.PositionHandle(transformPosition + anchor.HandleBPosition, Quaternion.identity);
+                        Handles.color = Color.blue;
+                        newPosition = Handles.FreeMoveHandle(transformPosition + anchor.HandleBPosition, Quaternion.identity, 0.15f, m_HandleSnap, Handles.SphereHandleCap);
                         if (EditorGUI.EndChangeCheck())
                         {
                             Undo.RecordObject(spline, "Change Anchor Handle B Position");
@@ -120,11 +132,7 @@ namespace TrafficSystem
                             serializedObject.Update();
                         }
 
-                        // draw lines from handles to anchors
-                        Handles.color = Color.black;
-                        Handles.DrawLine(anchor.transform.position, transformPosition + anchor.HandleAPosition);
-                        Handles.DrawLine(anchor.transform.position, transformPosition + anchor.HandleBPosition);
-
+                        // draw branch
                         for (int i = 0; i < anchor.Branches.Count; i++)
                         {
                             Anchor anchorTo = anchor.Branches[i].ToAnchor;
@@ -202,7 +210,7 @@ namespace TrafficSystem
             }
 
             // create anchor object
-            GameObject anchorObject = new GameObject("Anchor " + parentPath.transform.childCount, typeof(Anchor));
+            GameObject anchorObject = new GameObject("Anchor " + parentPath.transform.childCount, typeof(Anchor), typeof(BoxCollider));
             anchorObject.transform.SetParent(parentPath.transform, false);
 
             Anchor anchor = anchorObject.GetComponent<Anchor>();
@@ -253,13 +261,14 @@ namespace TrafficSystem
             DestroyImmediate(selectedAnchor.gameObject);
         }
 
+        // Add a branch to a different spline
         private void AddBranch()
         {
             GameObject branchFromAnchor = Selection.activeGameObject;
 
             // create scene objects
             GameObject splineObject = new GameObject("SplinePath Of " + branchFromAnchor.name, typeof(SplinePath));
-            GameObject anchorObject = new GameObject("Anchor " + splineObject.transform.childCount, typeof(Anchor));
+            GameObject anchorObject = new GameObject("Anchor " + splineObject.transform.childCount, typeof(Anchor), typeof(BoxCollider));
 
             splineObject.transform.SetParent(branchFromAnchor.transform, false);
             splineObject.transform.position = branchFromAnchor.transform.parent.position;
@@ -286,6 +295,7 @@ namespace TrafficSystem
             Selection.activeGameObject = anchor.gameObject;
         }
 
+        // remove the branch
         private void RemoveBranch()
         {
             SplinePath path = Selection.activeGameObject.GetComponent<SplinePath>();

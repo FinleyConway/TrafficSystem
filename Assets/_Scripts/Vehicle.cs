@@ -11,7 +11,7 @@ namespace TrafficSystem
 
         [SerializeField, Range(0, c_MaxMilesPerHour)] private int m_MilesPerHour = 60; // 1 unity unity * 2.23694f (m/s -> mph)
         private float m_MoveAmount;
-        private float m_MaxMoveAmount;
+        public float MaxMoveAmount { get; set; }
         private bool m_IsBraking = false;
         private const int c_MaxMilesPerHour = 160;
         private static readonly Dictionary<int, float> s_BrakingDistances = new Dictionary<int, float>();
@@ -21,14 +21,14 @@ namespace TrafficSystem
         private void Start()
         {
             CalculateBrakingDistances();
-            m_MaxMoveAmount = m_Spline.GetSplineLength();
+            MaxMoveAmount = m_Spline.GetSplineLength();
         }
 
         private void Update()
         {
             MovementHandler();
 
-            m_MoveAmount = (m_MoveAmount + (Time.deltaTime * m_MilesPerHour)) % m_MaxMoveAmount;
+            m_MoveAmount = (m_MoveAmount + (Time.deltaTime * m_MilesPerHour)) % MaxMoveAmount;
 
             transform.position = m_Spline.GetPositionAtUnits(m_MoveAmount).Position;
             transform.forward = m_Spline.GetForwardAtUnits(m_MoveAmount);

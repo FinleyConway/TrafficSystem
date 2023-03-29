@@ -12,7 +12,13 @@ namespace TrafficSystem
 
             DrawDefaultInspector();
 
-
+            if (GUILayout.Button("Choose Random Spot"))
+            {
+                Anchor end = path.Anchors[Random.Range(0, path.Anchors.Count)];
+                path.Follow.Anchors.Clear();
+                path.FindPath(path.Start, end);
+                path.Vehicle.MaxMoveAmount = path.Follow.GetPreCalculatedSplineLength();
+            }
         }
     }
 }
