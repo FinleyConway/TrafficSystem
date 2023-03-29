@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace TrafficSystem
 {
-    public class Anchor : MonoBehaviour
+    public class Anchor : MonoBehaviour, IHeapItem<Anchor>
     {
         [field: SerializeField] public Vector3 HandleAPosition { get; set; }
         [field: SerializeField] public Vector3 HandleBPosition { get; set; }
@@ -14,12 +14,23 @@ namespace TrafficSystem
         public float HCost { get; set; }
         public float FCost { get { return GCost + HCost; } }
         public Anchor Parent { get; set; }
-    }
+        public int HeapIndex { get; set; }
 
-    [Serializable]
-    public struct Branch
-    {
-        public SplinePath NextPath;
-        public Anchor ToAnchor;
+        public int CompareTo(Anchor anchor)
+        {
+            int compare = FCost.CompareTo(anchor.FCost);
+            if (compare == 0)
+            {
+                compare = HCost.CompareTo(anchor.HCost);
+            }
+            return -compare;
+        }
+
+        [Serializable]
+        public struct Branch
+        {
+            public SplinePath NextPath;
+            public Anchor ToAnchor;
+        }
     }
 }

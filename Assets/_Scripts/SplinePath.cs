@@ -219,6 +219,8 @@ namespace TrafficSystem
             return Spline.CubicLerp(anchorA.transform.position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.transform.position, unitDistance / m_SplineLength);
         }
 
+        public float GetPreCalculatedSplineLength() { return m_SplineLength; }
+
         /// <summary>
         /// Get the size of the spline.
         /// </summary>
@@ -376,6 +378,20 @@ namespace TrafficSystem
             public Anchor CurrentAnchor;
             public Anchor LastAnchor;
             public Anchor NextAnchor;
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            Anchor previous = null;
+
+            foreach (Anchor anchor in Anchors)
+            {
+                if (previous != null)
+                {
+                    Gizmos.DrawLine(previous.transform.position, anchor.transform.position);
+                }
+                previous = anchor;
+            }
         }
     }
 }

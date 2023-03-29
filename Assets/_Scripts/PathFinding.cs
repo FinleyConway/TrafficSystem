@@ -5,10 +5,13 @@ namespace TrafficSystem
 {
     public class PathFinding : MonoBehaviour
     {
+        [SerializeField] private PathType m_PathType;
+
         public Anchor Start;
         public Anchor End;
 
         public SplinePath Follow;
+        public Vehicle Vehicle;
 
         private void Awake()
         {
@@ -17,31 +20,19 @@ namespace TrafficSystem
 
         public void FindPath(Anchor startPosition, Anchor targetPosition)
         {
-            Anchor startNode = startPosition;
-            Anchor endNode = targetPosition;
-
-            List<Anchor> openSet = new List<Anchor>();
+            DynamicHeap<Anchor> openSet = new DynamicHeap<Anchor>();
             HashSet<Anchor> closeSet = new HashSet<Anchor>();
 
-            openSet.Add(startNode);
+            openSet.Add(startPosition);
 
             while (openSet.Count > 0)
             {
-                Anchor currentNode = openSet[0];
-                for (int i = 1; i < openSet.Count; i++)
-                {
-                    if (openSet[i].FCost < currentNode.FCost || openSet[i].FCost == currentNode.FCost && openSet[i].HCost < currentNode.HCost)
-                    {
-                        currentNode = openSet[i];
-                    }
-                }
-
-                openSet.Remove(currentNode);
+                Anchor currentNode = openSet.RemoveFirst();
                 closeSet.Add(currentNode);
 
                 if (currentNode == targetPosition)
                 {
-                    RetrancePath(startNode, endNode);
+                    RetrancePath(startPosition, targetPosition);
                     return;
                 }
 
@@ -49,16 +40,15 @@ namespace TrafficSystem
 
                 foreach (Anchor nearby in GetNearbyAnchors(currentNode, path))
                 {
+                    if (nearby == null) continue;
+
                     if (closeSet.Contains(nearby))
                     {
                         continue;
                     }
-                    float distance = path.GetSplineLengthTo(currentNode) - path.GetSplineLengthTo(nearby);
-                    float newMovementCostToNearby = currentNode.GCost + distance;
 
-                    print(nearby);
+                    float newMovementCostToNearby = currentNode.GCost + (m_PathType == PathType.AStar ? path.GetSplineLengthTo(currentNode) - path.GetSplineLengthTo(nearby) : 0);
 
-                    if (nearby == null) continue;
                     if (newMovementCostToNearby < nearby.GCost || !openSet.Contains(nearby))
                     {
                         nearby.GCost = newMovementCostToNearby;
@@ -68,6 +58,10 @@ namespace TrafficSystem
                         if (!openSet.Contains(nearby))
                         {
                             openSet.Add(nearby);
+                        }
+                        else
+                        {
+                            openSet.UpdateItem(nearby);
                         }
                     }
                 }
@@ -83,9 +77,11 @@ namespace TrafficSystem
                 Follow.Anchors.Add(currentNode);
                 currentNode = currentNode.Parent;
             }
-            Follow.Anchors.Add(startNode);
 
+            // temp, will figure out a better way of storing the new path
+            Follow.Anchors.Add(startNode);
             Follow.Anchors.Reverse();
+
             Follow.SetupPointList();
             Follow.SetDirty();
         }
@@ -103,9 +99,7 @@ namespace TrafficSystem
             anchors.Add(path.GetPreviousAnchor(anchor)); 
             return anchors;
         }
+
+        private enum PathType { Dijkstra, AStar }
     }
 }
-
-/*
- * unoptimized but ill fix it when im not tired
-*/ 

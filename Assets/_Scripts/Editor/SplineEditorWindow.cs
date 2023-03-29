@@ -37,13 +37,17 @@ namespace TrafficSystem
             {
                 if (GUILayout.Button("Create Spline Path"))
                 {
-                    GameObject path = new GameObject("Spline Path 0", typeof(SplinePath));
+                    // create spline and anchor
+                    GameObject path = new GameObject("Spline Path Root", typeof(SplinePath));
                     GameObject anchorObject = new GameObject("Anchor " + path.transform.childCount, typeof(Anchor));
+
                     anchorObject.transform.SetParent(path.transform, false);
+
                     m_Spline = path.GetComponent<SplinePath>();
-                    m_Spline.                    Anchors.Add(anchorObject.GetComponent<Anchor>()); 
+                    m_Spline.Anchors.Add(anchorObject.GetComponent<Anchor>()); 
                     m_ActiveSplines.Add(m_Spline);
-                    Selection.activeGameObject = anchorObject;
+
+                    Selection.activeGameObject = path;
                 }
             }
             else
@@ -71,7 +75,7 @@ namespace TrafficSystem
                     {
                         // draw anchor positions
                         Handles.color = Color.red;
-                        Handles.SphereHandleCap(0, anchor.transform.position, Quaternion.identity, 0.25f, EventType.Repaint);
+                        Handles.SphereHandleCap(0, anchor.transform.position, Quaternion.identity, 0.15f, EventType.Repaint);
 
                         // handle movement of positions
                         EditorGUI.BeginChangeCheck();
@@ -149,32 +153,61 @@ namespace TrafficSystem
 
         private void DrawButtons()
         {
-            if (GUILayout.Button("Add Anchor"))
-            {
-                AddAnchor();
-            }
             if (Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<Anchor>())
             {
+                if (GUILayout.Button("Add Anchor"))
+                {
+                    AddAnchor();
+                }
                 if (GUILayout.Button("Remove Anchor"))
                 {
                     RemoveAnchor();
                 }
-                if (GUILayout.Button("Add Branch Anchor"))
+                if (GUILayout.Button("Add Branch"))
                 {
                     AddBranch();
                 }
             }
+            else
+            {
+                EditorGUILayout.HelpBox("Select an anchor to add an anchor or branch or to remove an anchor.", MessageType.Info);
+            }
+
+            if (Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<SplinePath>())
+            {
+                if (GUILayout.Button("Remove Branch"))
+                {
+                    RemoveBranch();
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("Select a spline to remove a branch.", MessageType.Info);
+            }
         }
 
+        // Create a spline anchor
         private void AddAnchor()
         {
-            SplinePath parentPath = Selection.activeGameObject.transform.parent.GetComponent<SplinePath>();
+            GameObject selectedObj = Selection.activeGameObject;
+            SplinePath parentPath = null;
 
+            if (selectedObj != null && selectedObj.TryGetComponent(out SplinePath path)) 
+            {
+                parentPath = path;
+            }
+            else if (selectedObj != null && selectedObj.transform.parent.TryGetComponent(out SplinePath path1))
+            {
+                parentPath = path1;
+            }
+
+            // create anchor object
             GameObject anchorObject = new GameObject("Anchor " + parentPath.transform.childCount, typeof(Anchor));
             anchorObject.transform.SetParent(parentPath.transform, false);
 
             Anchor anchor = anchorObject.GetComponent<Anchor>();
 
+            // offset anchor if there is one or more anchor
             if (parentPath.Anchors.Count >= 1)
             {
                 Anchor lastAnchor = parentPath.Anchors[parentPath.Anchors.Count - 1];
@@ -188,21 +221,33 @@ namespace TrafficSystem
             Selection.activeGameObject = anchor.gameObject;
         }
 
+        // Remove anchor from spline
         private void RemoveAnchor()
         {
             Anchor selectedAnchor = Selection.activeGameObject.GetComponent<Anchor>();
             SplinePath parentPath = selectedAnchor.transform.parent.GetComponent<SplinePath>();
 
+            // make sure that there is always 1 anchor
             if (parentPath.Anchors.Count <= 1) 
             {
                 return;
             }
 
-            parentPath.
-            Anchors.Remove(selectedAnchor);
+            // remove anchor from list and set previous anchor if any to the next selected object
+            parentPath.Anchors.Remove(selectedAnchor);
             if (parentPath.Anchors.Count >= 1)
             {
                 Selection.activeGameObject = parentPath.Anchors[parentPath.Anchors.Count - 1].gameObject;
+            }
+
+            // remove all branches if this anchor has any
+            if (selectedAnchor.Branches.Count > 0)
+            {
+                foreach (Anchor.Branch branch in selectedAnchor.Branches)
+                {
+                    branch.NextPath.Anchors.Remove(selectedAnchor);
+                }
+                selectedAnchor.Branches.Clear();
             }
 
             DestroyImmediate(selectedAnchor.gameObject);
@@ -210,27 +255,56 @@ namespace TrafficSystem
 
         private void AddBranch()
         {
+            GameObject branchFromAnchor = Selection.activeGameObject;
+
             // create scene objects
-            GameObject parent = Selection.activeGameObject;
-            GameObject splineObject = new GameObject("SplinePath Of " + parent.name, typeof(SplinePath));
-            GameObject anchorObject = new GameObject("Anchor " + parent.transform.childCount, typeof(Anchor));
+            GameObject splineObject = new GameObject("SplinePath Of " + branchFromAnchor.name, typeof(SplinePath));
+            GameObject anchorObject = new GameObject("Anchor " + splineObject.transform.childCount, typeof(Anchor));
+
+            splineObject.transform.SetParent(branchFromAnchor.transform, false);
+            splineObject.transform.position = branchFromAnchor.transform.parent.position;
 
             anchorObject.transform.SetParent(splineObject.transform, false);
 
             Anchor anchor = anchorObject.GetComponent<Anchor>();
+            Anchor branchedAnchor = branchFromAnchor.GetComponent<Anchor>();
 
-            anchor.transform.position = parent.transform.position + new Vector3(0, 0, 1);
-            anchor.HandleAPosition = parent.GetComponent<Anchor>().HandleAPosition + new Vector3(0, 0, 1);
-            anchor.HandleBPosition = parent.GetComponent<Anchor>().HandleBPosition + new Vector3(0, 0, 1);
+            // offset anchor from branched anchor
+            anchor.transform.position = branchFromAnchor.transform.position + new Vector3(0, 0, 1);
+            anchor.HandleAPosition = branchedAnchor.HandleAPosition + new Vector3(0, 0, 1);
+            anchor.HandleBPosition = branchedAnchor.HandleBPosition + new Vector3(0, 0, 1);
 
+            // add branched and new anchor to spline
             SplinePath path = splineObject.GetComponent<SplinePath>();
-            path.Anchors.Add(parent.GetComponent<Anchor>());
+            path.Anchors.Add(branchedAnchor);
             path.Anchors.Add(anchor);
 
-            Selection.activeGameObject.GetComponent<Anchor>().Branches.Add(new Branch { NextPath = path });
+            // set branch values to branched from anchor
+            branchedAnchor.Branches.Add(new Anchor.Branch { NextPath = path, ToAnchor = anchor });
             m_ActiveSplines.Add(path);
 
             Selection.activeGameObject = anchor.gameObject;
+        }
+
+        private void RemoveBranch()
+        {
+            SplinePath path = Selection.activeGameObject.GetComponent<SplinePath>();
+
+            Anchor startSplineAnchor = path.Anchors[1];
+            Anchor branchFromAnchor = path.Anchors[0];
+
+            foreach (Anchor.Branch branch in branchFromAnchor.Branches)
+            {
+                if (branch.ToAnchor == startSplineAnchor)
+                {
+                    branchFromAnchor.Branches.Remove(branch);
+                    break;
+                }
+            }
+
+            m_ActiveSplines.Remove(path);
+
+            DestroyImmediate(path.gameObject);
         }
     }
 }
