@@ -11,13 +11,14 @@ namespace TrafficSystem
         public Anchor End;
 
         public SplinePath Follow;
-        public Vehicle Vehicle;
+        public Vehicle Vehicle; // temp
 
-        public List<Anchor> Anchors = new List<Anchor>();
+        public List<Anchor> Anchors = new List<Anchor>(); // temp
 
         private void Awake()
         {
-            Anchor[] anchors = GameObject.FindObjectsOfType<Anchor>();
+            // temp
+            Anchor[] anchors = FindObjectsOfType<Anchor>();
             for (int i = 0;i < anchors.Length; i++)
             {
                 Anchors.Add(anchors[i]);
@@ -44,9 +45,7 @@ namespace TrafficSystem
                     return;
                 }
 
-                SplinePath path = currentNode.GetComponentInParent<SplinePath>();
-
-                foreach (Anchor nearby in GetNearbyAnchors(currentNode, path))
+                foreach (Anchor nearby in GetNearbyAnchors(currentNode))
                 {
                     if (nearby == null) continue;
 
@@ -55,12 +54,12 @@ namespace TrafficSystem
                         continue;
                     }
 
-                    float newMovementCostToNearby = currentNode.GCost + (m_PathType == PathType.AStar ? path.GetSplineLengthTo(currentNode) - path.GetSplineLengthTo(nearby) : 0);
-
+                    float newMovementCostToNearby = currentNode.GCost + (m_PathType == PathType.AStar ? Vector3.Distance(currentNode.transform.position, nearby.transform.position) : 0);
+       
                     if (newMovementCostToNearby < nearby.GCost || !openSet.Contains(nearby))
                     {
                         nearby.GCost = newMovementCostToNearby;
-                        nearby.HCost = path.GetSplineLengthTo(nearby) - path.GetSplineLengthTo(targetPosition);
+                        nearby.HCost = Vector3.Distance(nearby.transform.position, targetPosition.transform.position);
                         nearby.Parent = currentNode;
 
                         if (!openSet.Contains(nearby))
@@ -94,7 +93,7 @@ namespace TrafficSystem
             Follow.SetDirty();
         }
 
-        private List<Anchor> GetNearbyAnchors(Anchor anchor, SplinePath path)
+        private List<Anchor> GetNearbyAnchors(Anchor anchor)
         {
             List<Anchor> anchors = new List<Anchor>();
 
@@ -103,8 +102,8 @@ namespace TrafficSystem
                 anchors.Add(anchor.Branches[i].ToAnchor);
             }
 
-            anchors.Add(path.GetNextAnchor(anchor));
-            //anchors.Add(path.GetPreviousAnchor(anchor)); 
+            anchors.Add(anchor.NextAnchor);
+
             return anchors;
         }
 

@@ -335,34 +335,6 @@ namespace TrafficSystem
             }
         }
 
-        public Anchor GetPreviousAnchor(Anchor anchor)
-        {
-            int prev = Anchors.IndexOf(anchor);
-            if (prev > 0)
-            {
-                Anchor prevAnchor = Anchors[prev - 1];
-                return prevAnchor;
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        public Anchor GetNextAnchor(Anchor anchor)
-        {
-            int next = Anchors.IndexOf(anchor);
-            if (next < Anchors.Count - 1)
-            {
-                Anchor nextAnchor = Anchors[next + 1];
-                return nextAnchor;
-            }
-            else
-            {
-                return null;
-            }
-        }
-
         [Serializable]
         public class Point
         {

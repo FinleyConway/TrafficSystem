@@ -220,6 +220,8 @@ namespace TrafficSystem
             {
                 Anchor lastAnchor = parentPath.Anchors[parentPath.Anchors.Count - 1];
 
+                lastAnchor.NextAnchor = anchor;
+
                 anchor.transform.position = lastAnchor.transform.position + new Vector3(0, 0, 1);
                 anchor.HandleAPosition = lastAnchor.HandleAPosition + new Vector3(0, 0, 1);
                 anchor.HandleBPosition = lastAnchor.HandleBPosition + new Vector3(0, 0, 1);
