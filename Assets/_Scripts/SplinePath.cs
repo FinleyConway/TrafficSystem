@@ -244,33 +244,6 @@ namespace TrafficSystem
         }
 
         /// <summary>
-        /// Get the size of the spline to a specific anchor.
-        /// </summary>
-        /// <param name="stepSize">How many iterations to check. Lower is more accurate.</param>
-        /// <returns>The size of the spline.</returns>
-        public float GetSplineLengthTo(Anchor to, float stepSize = 0.01f)
-        {
-            float splineLength = 0;
-            Vector3 lastPosition = GetPositionAt(0f).Position;
-
-            // iterate through spline until the target anchor is reached
-            for (float t = 0; t < 1f; t += stepSize)
-            {
-                splineLength += Vector3.Distance(lastPosition, GetPositionAt(t).Position);
-                lastPosition = GetPositionAt(t).Position;
-                // if the end of the spline is reached before the target anchor, break out of loop
-                if (GetPositionAt(t).CurrentAnchor == to)
-                {
-                    break;
-                }
-            }
-
-            // adds the distance between the last position and the last position in the spline
-            //splineLength += Vector3.Distance(lastPosition, GetPositionAt(1f).Position);
-            return splineLength;
-        }
-
-        /// <summary>
         /// Update Spline.
         /// </summary>
         public void SetDirty()

@@ -3,31 +3,9 @@ using UnityEngine;
 
 namespace TrafficSystem
 {
-    public class PathFinding : MonoBehaviour
+    public class PathFinding
     {
-        [SerializeField] private PathType m_PathType;
-
-        public Anchor Start;
-        public Anchor End;
-
-        public SplinePath Follow;
-        public Vehicle Vehicle; // temp
-
-        public List<Anchor> Anchors = new List<Anchor>(); // temp
-
-        private void Awake()
-        {
-            // temp
-            Anchor[] anchors = FindObjectsOfType<Anchor>();
-            for (int i = 0;i < anchors.Length; i++)
-            {
-                Anchors.Add(anchors[i]);
-            }
-
-            FindPath(Start, End);
-        }
-
-        public void FindPath(Anchor startPosition, Anchor targetPosition)
+        public List<Anchor> FindPath(Anchor startPosition, Anchor targetPosition, PathType pathType)
         {
             DynamicHeap<Anchor> openSet = new DynamicHeap<Anchor>();
             HashSet<Anchor> closeSet = new HashSet<Anchor>();
@@ -41,56 +19,55 @@ namespace TrafficSystem
 
                 if (currentNode == targetPosition)
                 {
-                    RetrancePath(startPosition, targetPosition);
-                    return;
+                    return RetrancePath(startPosition, targetPosition);
                 }
 
-                foreach (Anchor nearby in GetNearbyAnchors(currentNode))
+                foreach (Anchor nearbyNode in GetNearbyAnchors(currentNode))
                 {
-                    if (nearby == null) continue;
+                    if (nearbyNode == null) continue;
 
-                    if (closeSet.Contains(nearby))
+                    if (closeSet.Contains(nearbyNode))
                     {
                         continue;
                     }
 
-                    float newMovementCostToNearby = currentNode.GCost + (m_PathType == PathType.AStar ? Vector3.Distance(currentNode.transform.position, nearby.transform.position) : 0);
+                    float newMovementCostToNearby = currentNode.GCost + (pathType == PathType.AStar ? Vector3.Distance(currentNode.transform.position, nearbyNode.transform.position) : 0);
        
-                    if (newMovementCostToNearby < nearby.GCost || !openSet.Contains(nearby))
+                    if (newMovementCostToNearby < nearbyNode.GCost || !openSet.Contains(nearbyNode))
                     {
-                        nearby.GCost = newMovementCostToNearby;
-                        nearby.HCost = Vector3.Distance(nearby.transform.position, targetPosition.transform.position);
-                        nearby.Parent = currentNode;
+                        nearbyNode.GCost = newMovementCostToNearby;
+                        nearbyNode.HCost = Vector3.Distance(nearbyNode.transform.position, targetPosition.transform.position);
+                        nearbyNode.Parent = currentNode;
 
-                        if (!openSet.Contains(nearby))
+                        if (!openSet.Contains(nearbyNode))
                         {
-                            openSet.Add(nearby);
+                            openSet.Add(nearbyNode);
                         }
                         else
                         {
-                            openSet.UpdateItem(nearby);
+                            openSet.UpdateItem(nearbyNode);
                         }
                     }
                 }
             }
+            return null;
         }
 
-        private void RetrancePath(Anchor startNode, Anchor endNode)
+        private List<Anchor> RetrancePath(Anchor startNode, Anchor endNode)
         {
+            List<Anchor> path = new List<Anchor>();
             Anchor currentNode = endNode;
 
             while (currentNode != startNode)
             {
-                Follow.Anchors.Add(currentNode);
+                path.Add(currentNode);
                 currentNode = currentNode.Parent;
             }
 
-            // temp, will figure out a better way of storing the new path
-            Follow.Anchors.Add(startNode);
-            Follow.Anchors.Reverse();
+            path.Add(startNode);
+            path.Reverse();
 
-            Follow.SetupPointList();
-            Follow.SetDirty();
+            return path;
         }
 
         private List<Anchor> GetNearbyAnchors(Anchor anchor)
@@ -107,6 +84,6 @@ namespace TrafficSystem
             return anchors;
         }
 
-        private enum PathType { Dijkstra, AStar }
+        public enum PathType { Dijkstra, AStar }
     }
 }
