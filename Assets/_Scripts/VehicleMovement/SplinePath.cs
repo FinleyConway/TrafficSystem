@@ -171,6 +171,8 @@ namespace TrafficSystem
                     Vector3 direction = (GetPositionAt(t).Position - GetPositionAt(t - incrementAmount).Position).normalized;
 
                     splineInfo.Position = GetPositionAt(t).Position + direction * (unitDistance - splineUnitDistance);
+                    splineInfo.LastAnchor = GetPositionAt(t - incrementAmount).LastAnchor;
+                    splineInfo.CurrentAnchor = GetPositionAt(t).CurrentAnchor;
                     splineInfo.NextAnchor = GetPositionAt(t).NextAnchor;
 
                     return splineInfo;
@@ -182,10 +184,13 @@ namespace TrafficSystem
             Anchor anchorB = Anchors[1];
 
             splineInfo.Position = Spline.CubicLerp(anchorA.transform.position, anchorA.HandleBPosition, anchorB.HandleAPosition, anchorB.transform.position, unitDistance / m_SplineLength);
-            splineInfo.NextAnchor = anchorA;
+            splineInfo.LastAnchor = anchorA;
+            splineInfo.CurrentAnchor = anchorB;
+            splineInfo.NextAnchor = anchorB.NextAnchor;
 
             return splineInfo;
         }
+
 
         /// <summary>
         /// Returns the forward direction of an object at a distance along the spline by linearly interpolating between the previous and next point's forward directions.

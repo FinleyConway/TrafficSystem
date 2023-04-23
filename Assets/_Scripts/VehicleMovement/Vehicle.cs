@@ -4,30 +4,31 @@ using UnityEngine;
 
 namespace TrafficSystem
 {
-    public class Vehicle : MonoBehaviour
+    public class Vehicle : MonoBehaviour, IVehicle
     {
         [Header("Path Finding")]
         [SerializeField] private Anchor m_StartAnchor;
         [SerializeField] private Anchor m_EndAnchor;
         [SerializeField] private PathFinding.PathType m_PathType;
-        [SerializeField] private SplinePath m_FollowPath;
-        private PathFinding m_Path;
+        [field: SerializeField] public SplinePath FollowPath { get; private set; }
+        public Anchor CurrentAnchor { get; private set; }
 
+        private PathFinding m_Path;
 
         [Header("Stopping")]
         [SerializeField] private float m_DecelerationRate = 5f;
         [SerializeField] private Transform m_StopDetection;
         [SerializeField] private LayerMask m_VehicleMask;
+        public bool ShouldStop { get; set; } = false;
 
-        [SerializeField, Range(0, c_MaxMilesPerHour)] private int m_CurrentSpeed;
 
-        [field: Header("Moving")]
-        [field: SerializeField, Range(0, 71.72f)] public float MetresPerSecond { get; private set; }
+        [Header("Moving")]
         [SerializeField] private float m_AccelerationRate = 0.5f;
+        [field: SerializeField] public int CurrentSpeedLimit { get; set; }
+        public float MetresPerSecond { get; set; }
+
         private float m_MoveAmount;
         private float m_MaxMoveAmount;
-        private bool m_IsBraking = false;
-
 
         private const int c_MaxMilesPerHour = 160;
         private static readonly Dictionary<int, float> s_BrakingDistances = new Dictionary<int, float>();
@@ -36,15 +37,17 @@ namespace TrafficSystem
         private void Awake()
         {
             m_Path = new PathFinding();
-            m_FollowPath.Anchors = m_Path.FindPath(m_StartAnchor, m_EndAnchor, m_PathType);
+            FollowPath.Anchors = m_Path.FindPath(m_StartAnchor, m_EndAnchor, m_PathType);
 
             if (s_BrakingDistances.Count <= 0 || s_BrakingDistances == null)
                 CalculateBrakingDistances();
+
+            MetresPerSecond = MphToMs(CurrentSpeedLimit);
         }
 
         private void Start()
         {
-            m_MaxMoveAmount = m_FollowPath.GetSplineLength();
+            m_MaxMoveAmount = FollowPath.GetSplineLength();
         }
 
         private void Update()
@@ -53,68 +56,78 @@ namespace TrafficSystem
 
             m_MoveAmount = (m_MoveAmount + (Time.deltaTime * MetresPerSecond)) % m_MaxMoveAmount;
 
-            transform.position = m_FollowPath.GetPositionAtUnits(m_MoveAmount).Position;
-            transform.forward = m_FollowPath.GetForwardAtUnits(m_MoveAmount);
+            SplinePath.SplineInfo info = FollowPath.GetPositionAtUnits(m_MoveAmount);
+
+            CurrentAnchor = info.CurrentAnchor;
+            transform.position = info.Position;
+            transform.forward = FollowPath.GetForwardAtUnits(m_MoveAmount);
         }
 
         private void MovementHandler()
         {
-            float brakingDistance = GetBrakingDistance(MsToMph(MetresPerSecond));
+            float speedDistance = GetBrakingDistance(MsToMph(MetresPerSecond));
 
             // Detect if there's a vehicle in front of the current vehicle
-            if (Physics.Raycast(m_StopDetection.position, m_StopDetection.forward, out RaycastHit hit, brakingDistance, m_VehicleMask))
+            if (Physics.Raycast(m_StopDetection.position, m_StopDetection.forward, out RaycastHit hit, speedDistance, m_VehicleMask))
             {
-                if (!m_IsBraking && MetresPerSecond > 0)
+                // Detect if theres a give way approaching
+                if (hit.transform.parent.TryGetComponent(out GiveWay giveWay))
                 {
-                    StartCoroutine(DecelerateCar(brakingDistance, hit.distance));
+                    // Tell give way to manage this car
+                    giveWay.CurrentCar = this;
+
+                    // stop car at give way line
+                    float stopDistance = 1.5f;
+                    if (hit.distance < stopDistance && ShouldStop)
+                    {
+                        // slow down and stop the car
+                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, 0f, m_DecelerationRate * Time.deltaTime);
+                    }
+                    else if (!ShouldStop)
+                    {
+                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, MphToMs(CurrentSpeedLimit), m_DecelerationRate * Time.deltaTime);
+                    }
+
+                }
+                // Detect if theres a car in front
+                else if (hit.transform.TryGetComponent(out IVehicle vehicle))
+                {
+                    if (IsCarInOppositeDirection(hit)) return;
+
+                    float carAheadSpeed = vehicle.MetresPerSecond;
+
+                    // emergency stop
+                    float minDistanceFromCar = 2f;
+
+                    if (hit.distance < minDistanceFromCar)
+                    {
+                        MetresPerSecond = 0;
+                    }
+                    // if this car is faster then the car ahead
+                    // the speed distance shoud take care of the 2 rule gap
+                    else if (MetresPerSecond >= carAheadSpeed)
+                    {
+                        // try to maintain speed 
+                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, carAheadSpeed, m_DecelerationRate * Time.deltaTime);
+                    }
                 }
             }
             else
             {
-                MetresPerSecond = Mathf.Lerp(MetresPerSecond, MphToMs(m_CurrentSpeed), m_AccelerationRate * Time.deltaTime);
+                MetresPerSecond = Mathf.Lerp(MetresPerSecond, MphToMs(CurrentSpeedLimit), m_AccelerationRate * Time.deltaTime);
             }
         }
 
         /// <summary>
-        /// Decelerate Car based on the braking distance.
+        /// Checks if the car that the raycast hits is driving in the same direction.
+        /// Fixes issue of when going round corners
         /// </summary>
-        private IEnumerator DecelerateCar(float brakingDistance, float distanceToOther)
+        private bool IsCarInOppositeDirection(RaycastHit hit)
         {
-            float initialVelocity = MetresPerSecond;
-            float adjustedBrakingDistance = Mathf.Max(0f, brakingDistance - distanceToOther);
-            float adjustedInitialVelocity = Mathf.Sqrt(2f * adjustedBrakingDistance * m_DecelerationRate);
+            Vector3 carDirection = hit.transform.forward;
+            float directionFrom = Vector3.Dot(transform.forward, carDirection);
 
-            m_IsBraking = true;
-
-            float time = (initialVelocity - adjustedInitialVelocity) / m_DecelerationRate;
-            float elapsedTime = 0f;
-
-            while (elapsedTime < time)
-            {
-                // Calculate the current speed based on elapsed time and deceleration
-                float currentSpeed = initialVelocity - m_DecelerationRate * elapsedTime;
-
-                // Update the car's speed
-                MetresPerSecond = currentSpeed;
-
-                // Calculate the current distance to the obstacle based on elapsed time and current speed
-                float currentDistance = distanceToOther + currentSpeed * elapsedTime;
-
-                // If the current distance is negative, set it to zero and stop the car
-                if (currentDistance <= 0f)
-                {
-                    MetresPerSecond = 0f;
-                    break;
-                }
-
-                // Increment the elapsed time
-                elapsedTime += Time.deltaTime;
-
-                yield return null;
-            }
-
-            MetresPerSecond = 0f;
-            m_IsBraking = false;
+            return directionFrom < 0;
         }
 
         /// <summary>

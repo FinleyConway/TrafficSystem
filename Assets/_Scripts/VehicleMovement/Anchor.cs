@@ -15,7 +15,7 @@ namespace TrafficSystem
         [field: SerializeField] public Vector3 HandleAPosition { get; set; }
         [field: SerializeField] public Vector3 HandleBPosition { get; set; }
         [field: SerializeField] public List<Branch> Branches { get; private set; } = new List<Branch>();
-        [field: SerializeField, HideInInspector] public Anchor NextAnchor { get; set; }
+        [field: SerializeField] public Anchor NextAnchor { get; set; }
 
         // path finding
         public float GCost { get; set; }

@@ -35,24 +35,22 @@ namespace TrafficSystem
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Spline"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_ActiveSplines"));
 
-            if (m_Spline == null)
+            if (GUILayout.Button("Create Spline Path"))
             {
-                if (GUILayout.Button("Create Spline Path"))
-                {
-                    // create spline and anchor
-                    GameObject path = new GameObject("Spline Path Root", typeof(SplinePath));
-                    GameObject anchorObject = new GameObject("Anchor " + path.transform.childCount, typeof(Anchor), typeof(BoxCollider));
+                // create spline and anchor
+                GameObject path = new GameObject("Spline Path Root", typeof(SplinePath));
+                GameObject anchorObject = new GameObject("Anchor " + path.transform.childCount, typeof(Anchor), typeof(BoxCollider));
 
-                    anchorObject.transform.SetParent(path.transform, false);
+                anchorObject.transform.SetParent(path.transform, false);
 
-                    m_Spline = path.GetComponent<SplinePath>();
-                    m_Spline.Anchors.Add(anchorObject.GetComponent<Anchor>()); 
-                    m_ActiveSplines.Add(m_Spline);
+                m_Spline = path.GetComponent<SplinePath>();
+                m_Spline.Anchors.Add(anchorObject.GetComponent<Anchor>());
+                m_ActiveSplines.Add(m_Spline);
 
-                    Selection.activeGameObject = path;
-                }
+                Selection.activeGameObject = path;
             }
-            else
+
+            if (m_Spline != null)
             {
                 EditorGUILayout.BeginVertical("box");
                 DrawButtons();
@@ -110,7 +108,7 @@ namespace TrafficSystem
                         // handle movement of positions
                         EditorGUI.BeginChangeCheck();
                         Handles.color = Color.blue;
-                        newPosition = Handles.FreeMoveHandle(anchor.HandleAPosition, Quaternion.identity, 0.15f, m_HandleSnap, Handles.SphereHandleCap);
+                        newPosition = Handles.FreeMoveHandle(transformPosition + anchor.HandleAPosition, Quaternion.identity, 0.15f, m_HandleSnap, Handles.SphereHandleCap);
                         if (EditorGUI.EndChangeCheck())
                         {
                             Undo.RecordObject(spline, "Change Anchor Handle A Position");
