@@ -10,10 +10,4 @@ This will include:
 * Stop/starting system
 * Give way system
 
-[Insert image of project here]
-
-## Table Of Contents
-
-## The Project
-
-## License
+![image](https://user-images.githubusercontent.com/79692910/236177015-8383ac04-83af-4a4f-822b-2f131801f505.png)
