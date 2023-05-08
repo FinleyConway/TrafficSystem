@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Collections;
 using UnityEngine;
 
 namespace TrafficSystem
@@ -7,13 +6,12 @@ namespace TrafficSystem
     public class Vehicle : MonoBehaviour, IVehicle
     {
         [Header("Path Finding")]
-        [SerializeField] private Anchor m_StartAnchor;
-        [SerializeField] private Anchor m_EndAnchor;
         [SerializeField] private PathFinding.PathType m_PathType;
-        [field: SerializeField] public SplinePath FollowPath { get; private set; }
+        [field: SerializeField] public SplinePath Path { get; private set; }
+        public Anchor StartAnchor { get; set; }
+        public Anchor EndAnchor { get; set; }
         public Anchor CurrentAnchor { get; private set; }
-
-        private PathFinding m_Path;
+        private bool m_ShouldGenPath = false;
 
         [Header("Stopping")]
         [SerializeField] private float m_DecelerationRate = 5f;
@@ -21,46 +19,72 @@ namespace TrafficSystem
         [SerializeField] private LayerMask m_VehicleMask;
         public bool ShouldStop { get; set; } = false;
 
-
         [Header("Moving")]
         [SerializeField] private float m_AccelerationRate = 0.5f;
         [field: SerializeField] public int CurrentSpeedLimit { get; set; }
         public float MetresPerSecond { get; set; }
 
-        private float m_MoveAmount;
-        private float m_MaxMoveAmount;
+        private float m_MoveAmount = 0;
+        private float m_MaxMoveAmount = 0;
 
         private const int c_MaxMilesPerHour = 160;
         private static readonly Dictionary<int, float> s_BrakingDistances = new Dictionary<int, float>();
 
-
         private void Awake()
         {
-            m_Path = new PathFinding();
-            FollowPath.Anchors = m_Path.FindPath(m_StartAnchor, m_EndAnchor, m_PathType);
-
             if (s_BrakingDistances.Count <= 0 || s_BrakingDistances == null)
                 CalculateBrakingDistances();
 
             MetresPerSecond = MphToMs(CurrentSpeedLimit);
         }
 
-        private void Start()
+        public void Init()
         {
-            m_MaxMoveAmount = FollowPath.GetSplineLength();
+            PathRequestManager.RequestPath(StartAnchor, EndAnchor, GeneratePath);
+        }
+
+        private void GeneratePath(Anchor[] path, bool success)
+        {
+            if (success)
+            {
+                Path.Anchors = new List<Anchor>(path);
+
+                StartAnchor = Path.Anchors[0];
+                EndAnchor = Path.Anchors[Path.Anchors.Count - 1];
+
+                Path.Init();
+                m_MaxMoveAmount = Path.GetSplineLength();
+                m_MoveAmount = 0;
+                m_ShouldGenPath = false;
+            }
         }
 
         private void Update()
         {
-            MovementHandler();
+            if (Path.Anchors.Count > 0)
+            {
+                m_MoveAmount += Time.deltaTime * MetresPerSecond;
 
-            m_MoveAmount = (m_MoveAmount + (Time.deltaTime * MetresPerSecond)) % m_MaxMoveAmount;
+                if (m_MoveAmount < m_MaxMoveAmount)
+                {
+                    MovementHandler();
 
-            SplinePath.SplineInfo info = FollowPath.GetPositionAtUnits(m_MoveAmount);
+                    m_ShouldGenPath = false;
+                    SplinePath.SplineInfo info = Path.GetPositionAtUnits(m_MoveAmount);
 
-            CurrentAnchor = info.CurrentAnchor;
-            transform.position = info.Position;
-            transform.forward = FollowPath.GetForwardAtUnits(m_MoveAmount);
+                    CurrentAnchor = info.CurrentAnchor;
+                    transform.position = info.Position;
+                    transform.forward = Path.GetForwardAtUnits(m_MoveAmount);
+                }
+                else
+                {
+                    if (!m_ShouldGenPath)
+                    {
+                        PathRequestManager.RequestPath(EndAnchor, CarPlacer.instance.GetRandomAnchor(), GeneratePath);
+                        m_ShouldGenPath = true;
+                    }
+                }
+            }
         }
 
         private void MovementHandler()
@@ -70,27 +94,8 @@ namespace TrafficSystem
             // Detect if there's a vehicle in front of the current vehicle
             if (Physics.Raycast(m_StopDetection.position, m_StopDetection.forward, out RaycastHit hit, speedDistance, m_VehicleMask))
             {
-                // Detect if theres a give way approaching
-                if (hit.transform.parent.TryGetComponent(out GiveWay giveWay))
-                {
-                    // Tell give way to manage this car
-                    giveWay.CurrentCar = this;
-
-                    // stop car at give way line
-                    float stopDistance = 1.5f;
-                    if (hit.distance < stopDistance && ShouldStop)
-                    {
-                        // slow down and stop the car
-                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, 0f, m_DecelerationRate * Time.deltaTime);
-                    }
-                    else if (!ShouldStop)
-                    {
-                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, MphToMs(CurrentSpeedLimit), m_DecelerationRate * Time.deltaTime);
-                    }
-
-                }
                 // Detect if theres a car in front
-                else if (hit.transform.TryGetComponent(out IVehicle vehicle))
+                if (hit.transform.TryGetComponent(out IVehicle vehicle))
                 {
                     if (IsCarInOppositeDirection(hit)) return;
 
@@ -109,6 +114,58 @@ namespace TrafficSystem
                     {
                         // try to maintain speed 
                         MetresPerSecond = Mathf.Lerp(MetresPerSecond, carAheadSpeed, m_DecelerationRate * Time.deltaTime);
+                    }
+                }
+
+                // Detect if theres a give way approaching
+                if (hit.transform.TryGetComponent(out IControlCar giveWay))
+                {
+                    if (IsCarInOppositeDirection(hit)) return;
+
+                    if (hit.transform.TryGetComponent(out SpeedChange speed))
+                    {
+                        float distanceFromSign = hit.distance;
+
+                        // only slow down if the speed is lower then the current speed
+                        if (CurrentSpeedLimit > speed.ExpectedMph)
+                        {
+                            // sharper the braking the closer the car is
+                            float lerpTime = 1 / distanceFromSign; // inverse distance
+                            lerpTime = Mathf.Clamp(lerpTime, 0.1f, 1f);
+                            MetresPerSecond = Mathf.Lerp(MetresPerSecond, MphToMs(speed.ExpectedMph), lerpTime);
+                            CurrentSpeedLimit = speed.ExpectedMph;
+                        }
+                    }
+
+                    // Tell give way to manage this car
+                    giveWay.CurrentCar = this;
+
+                    // stop car at give way line
+                    float stopDistance = 1.5f;
+                    if (hit.distance < stopDistance && ShouldStop)
+                    {
+                        // slow down and stop the car
+                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, 0f, m_DecelerationRate * Time.deltaTime);
+                    }
+                    else if (!ShouldStop)
+                    {
+                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, MphToMs(CurrentSpeedLimit), m_DecelerationRate * Time.deltaTime);
+                    }
+                }
+
+                else if (hit.transform.TryGetComponent(out SpeedChange speedChange))
+                {
+                    if (IsCarInOppositeDirection(hit)) return;
+
+                    float distanceFromSign = hit.distance;
+
+                    // only slow down if the speed is lower then the current speed
+                    if (CurrentSpeedLimit > speedChange.ExpectedMph)
+                    {
+                        // sharper the braking the closer the car is
+                        float lerpTime = 1 / distanceFromSign; // inverse distance
+                        lerpTime = Mathf.Clamp(lerpTime, 0.1f, 1f);
+                        MetresPerSecond = Mathf.Lerp(MetresPerSecond, MphToMs(speedChange.ExpectedMph), lerpTime);
                     }
                 }
             }

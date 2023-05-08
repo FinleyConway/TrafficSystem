@@ -1,12 +1,31 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace TrafficSystem
 {
-    public class PathFinding
+    public class PathFinding : MonoBehaviour
     {
-        public List<Anchor> FindPath(Anchor startPosition, Anchor targetPosition, PathType pathType)
+        private PathRequestManager m_RequestManager;
+
+        private void Awake()
         {
+            m_RequestManager = GetComponent<PathRequestManager>();
+        }
+
+        public enum PathType { Dijkstra, AStar }
+
+        public void StartFindPath(Anchor pathStart, Anchor pathEnd)
+        {
+            StartCoroutine(FindPath(pathStart, pathEnd, PathType.AStar)); 
+        }
+
+        private IEnumerator FindPath(Anchor startPosition, Anchor targetPosition, PathType pathType)
+        {
+            Anchor[] wayPoints = new Anchor[0];
+            bool pathSuccess = false;
+
             DynamicHeap<Anchor> openSet = new DynamicHeap<Anchor>();
             HashSet<Anchor> closeSet = new HashSet<Anchor>();
 
@@ -19,7 +38,8 @@ namespace TrafficSystem
 
                 if (currentNode == targetPosition)
                 {
-                    return RetrancePath(startPosition, targetPosition);
+                    pathSuccess = true;
+                    break;
                 }
 
                 foreach (Anchor nearbyNode in GetNearbyAnchors(currentNode))
@@ -50,10 +70,16 @@ namespace TrafficSystem
                     }
                 }
             }
-            return null;
+            yield return null;
+
+            if  (pathSuccess)
+            {
+                wayPoints = RetrancePath(startPosition, targetPosition);
+            }
+            m_RequestManager.FinishedProcessingPath(wayPoints, pathSuccess);
         }
 
-        private List<Anchor> RetrancePath(Anchor startNode, Anchor endNode)
+        private Anchor[] RetrancePath(Anchor startNode, Anchor endNode)
         {
             List<Anchor> path = new List<Anchor>();
             Anchor currentNode = endNode;
@@ -67,7 +93,7 @@ namespace TrafficSystem
             path.Add(startNode);
             path.Reverse();
 
-            return path;
+            return path.ToArray();
         }
 
         private List<Anchor> GetNearbyAnchors(Anchor anchor)
@@ -83,7 +109,5 @@ namespace TrafficSystem
 
             return anchors;
         }
-
-        public enum PathType { Dijkstra, AStar }
     }
 }

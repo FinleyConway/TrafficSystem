@@ -17,10 +17,13 @@ namespace TrafficSystem
 
         public event Action OnDirty;
 
-        private void Start()
+        public void Init()
         {
             m_SplineLength = GetSplineLength();
-            SetupPointList();
+            if (m_Points == null)
+                SetupPointList();
+            else
+                UpdatePointList();
         }
 
         /// <summary>

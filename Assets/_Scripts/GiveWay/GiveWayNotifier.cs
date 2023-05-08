@@ -9,10 +9,9 @@ namespace TrafficSystem
     /// </summary>
     public class GiveWayNotifier : MonoBehaviour
     {
-        [SerializeField] private Anchor m_NextAnchorObstruction;
         private readonly HashSet<IVehicle> m_VehiclesInTriggerZone = new HashSet<IVehicle>();
 
-        public event Action<Anchor, bool> OnGiveWay;
+        public event Action<IVehicle, bool> OnGiveWay;
 
         private void OnTriggerEnter(Collider other)
         {
@@ -20,7 +19,7 @@ namespace TrafficSystem
             {
                 if (m_VehiclesInTriggerZone.Add(vehicle))
                 {
-                    OnGiveWay?.Invoke(m_NextAnchorObstruction, true);
+                    OnGiveWay?.Invoke(vehicle, true);
                 }
             }
         }
@@ -31,7 +30,7 @@ namespace TrafficSystem
             {
                 if (m_VehiclesInTriggerZone.Remove(vehicle))
                 {
-                    OnGiveWay?.Invoke(m_NextAnchorObstruction, false);
+                    OnGiveWay?.Invoke(vehicle, false);
                 }
             }
         }
